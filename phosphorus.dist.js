@@ -178,10 +178,26 @@ var P;
 (function (P) {
     var config;
     (function (config) {
+        /**
+         * Global scale of the window.
+         */
         config.scale = window.devicePixelRatio || 1;
+        /**
+         * Does this browser have touch events on the document?
+         */
         config.hasTouchEvents = 'ontouchstart' in document;
+        /**
+         * The target framerate for phosphorus to run at.
+         */
         config.framerate = 30;
+        /**
+         * Is debug mode enabled?
+         */
         config.debug = window.location.search.includes("debug");
+        /**
+         * The API route to download a project's project.json. Replace $id with the project ID.
+         * project.json could be a Scratch 2 project, Scratch 3 project, or 404.
+         */
         config.PROJECT_API = 'https://projects.scratch.mit.edu/$id';
     })(config = P.config || (P.config = {}));
 })(P || (P = {}));
@@ -1719,10 +1735,11 @@ var P;
          * @param name The name of the font (font-family)
          */
         function loadFont(name) {
-            P.IO.progressHooks.new();
+            const task = 'loadFont ' + name;
+            P.IO.startTask(task);
             const observer = new FontFaceObserver(name);
             return observer.load().then(() => {
-                P.IO.progressHooks.end();
+                P.IO.endTask(task);
             });
         }
         fonts.loadFont = loadFont;
@@ -1768,41 +1785,82 @@ var P;
 (function (P) {
     var IO;
     (function (IO) {
-        // Hooks that can be replaced by other scripts to hook into progress reports.
-        IO.progressHooks = {
-            // Indicates that a new task has started
-            new() { },
-            // Indicates that a task has finished successfully
-            end() { },
-            // Sets the current progress, should override new() and end()
-            set(p) { },
-            // Indicates an error has occurred and the project will likely fail to load
-            error(error) { },
+        /**
+         * Phases of loading projects.
+         */
+        let Phase;
+        (function (Phase) {
+            /**
+             * The project's assets (costumes, sounds) are being downloaded. (typically the longest phase)
+             */
+            Phase["Assets"] = "assets";
+            /**
+             * The project file is being read.
+             */
+            Phase["File"] = "file";
+            /**
+             * The project file is being downloaded.
+             */
+            Phase["Project"] = "project";
+            /**
+             * Dependencies of the runtime (fonts, other things) are being downloaded.
+             */
+            Phase["Dependencies"] = "dependencies";
+        })(Phase = IO.Phase || (IO.Phase = {}));
+        IO.hooks = {
+            setPhase(phase) {
+            },
+            startTask(task) {
+            },
+            endTask(task) {
+            },
+            overall(progress) {
+            },
         };
-        function fetch(url, opts) {
-            IO.progressHooks.new();
-            return window.fetch(url, opts)
+        function setPhase(phase) {
+            IO.hooks.setPhase(phase);
+        }
+        IO.setPhase = setPhase;
+        function startTask(task) {
+            IO.hooks.startTask(task);
+        }
+        IO.startTask = startTask;
+        function endTask(task) {
+            IO.hooks.endTask(task);
+        }
+        IO.endTask = endTask;
+        function overall(progress) {
+            IO.hooks.overall(progress);
+        }
+        IO.overall = overall;
+        /**
+         * Download a URL. Uses appropriate progress hooks.
+         */
+        function fetch(url) {
+            const taskId = 'fetch ' + url;
+            IO.hooks.startTask(taskId);
+            return window.fetch(url)
                 .then((r) => {
-                IO.progressHooks.end();
+                IO.hooks.endTask(taskId);
                 return r;
-            })
-                .catch((err) => {
-                IO.progressHooks.error(err);
-                throw err;
             });
         }
         IO.fetch = fetch;
+        /**
+         * Read a file as an ArrayBuffer. Uses appropriate progress hooks.
+         */
         function fileAsArrayBuffer(file) {
+            setPhase(Phase.File);
             const fileReader = new FileReader();
             return new Promise((resolve, reject) => {
                 fileReader.onloadend = function () {
                     resolve(fileReader.result);
                 };
                 fileReader.onerror = function (err) {
-                    reject('Failed to load file');
+                    reject(err);
                 };
-                fileReader.onprogress = function (progress) {
-                    IO.progressHooks.set(progress);
+                fileReader.onprogress = function (event) {
+                    overall(event.loaded / event.total);
                 };
                 fileReader.readAsArrayBuffer(file);
             });
@@ -2381,12 +2439,13 @@ var P;
         sb2.Scratch2Sprite = Scratch2Sprite;
         // loads an image from a URL
         function loadImage(url) {
-            P.IO.progressHooks.new();
+            const task = 'loadImage ' + url;
+            P.IO.startTask(task);
             var image = new Image();
             image.crossOrigin = 'anonymous';
             return new Promise((resolve, reject) => {
                 image.onload = function () {
-                    P.IO.progressHooks.end();
+                    P.IO.endTask(task);
                     resolve(image);
                 };
                 image.onerror = function (err) {
@@ -2413,13 +2472,16 @@ var P;
         function loadProject(data) {
             var children;
             var stage;
+            P.IO.setPhase(P.IO.Phase.Dependencies);
             return loadFonts()
-                .then(() => Promise.all([
-                loadWavs(),
-                loadArray(data.children, loadObject).then((c) => children = c),
-                loadBase(data, true).then((s) => stage = s),
-            ]))
                 .then(() => {
+                P.IO.setPhase(P.IO.Phase.Assets);
+                return Promise.all([
+                    loadWavs(),
+                    loadArray(data.children, loadObject).then((c) => children = c),
+                    loadBase(data, true).then((s) => stage = s),
+                ]);
+            }).then(() => {
                 children = children.filter((i) => i);
                 children.forEach((c) => c.stage = stage);
                 var sprites = children.filter((i) => i instanceof Scratch2Sprite);
@@ -5058,8 +5120,12 @@ var P;
                 const targets = this.projectData.targets;
                 // sort targets by their layerOrder to match how they will display
                 targets.sort((a, b) => a.layerOrder - b.layerOrder);
+                P.IO.setPhase(P.IO.Phase.Dependencies);
                 return this.loadFonts()
-                    .then(() => Promise.all(targets.map((data) => this.loadTarget(data))))
+                    .then(() => {
+                    P.IO.setPhase(P.IO.Phase.Assets);
+                    return Promise.all(targets.map((data) => this.loadTarget(data)));
+                })
                     .then((targets) => {
                     const stage = targets.filter((i) => i.isStage)[0];
                     if (!stage) {
@@ -5087,41 +5153,44 @@ var P;
                 this.buffer = buffer;
             }
             getAsText(path) {
-                P.IO.progressHooks.new();
+                const task = 'getAsText#zip ' + path;
+                P.IO.startTask(task);
                 return this.zip.file(path).async('text')
                     .then((response) => {
-                    P.IO.progressHooks.end();
+                    P.IO.endTask(task);
                     return response;
                 });
             }
             getAsArrayBuffer(path) {
-                P.IO.progressHooks.new();
+                const task = 'getAsArrayBuffer#zip ' + path;
+                P.IO.startTask(task);
                 return this.zip.file(path).async('arrayBuffer')
                     .then((response) => {
-                    P.IO.progressHooks.end();
+                    P.IO.endTask(task);
                     return response;
                 });
             }
             getAsBase64(path) {
-                P.IO.progressHooks.new();
+                const task = 'getAsBase64#zip ' + path;
+                P.IO.startTask(task);
                 return this.zip.file(path).async('base64')
                     .then((response) => {
-                    P.IO.progressHooks.end();
+                    P.IO.endTask(task);
                     return response;
                 });
             }
             getAsImage(path, format) {
-                P.IO.progressHooks.new();
+                const task = 'getAsImage#zip ' + path + ' ' + format;
+                P.IO.startTask(task);
                 return this.getAsBase64(path)
                     .then((imageData) => {
                     return new Promise((resolve, reject) => {
                         const image = new Image();
                         image.onload = function () {
-                            P.IO.progressHooks.end();
+                            P.IO.endTask(task);
                             resolve(image);
                         };
                         image.onerror = function (error) {
-                            P.IO.progressHooks.error(error);
                             reject('Failed to load image: ' + path + '.' + format);
                         };
                         image.src = 'data:image/' + format + ';base64,' + imageData;
@@ -5163,15 +5232,15 @@ var P;
                     .then((request) => request.arrayBuffer());
             }
             getAsImage(path) {
-                P.IO.progressHooks.new();
+                const task = 'getAsImage#web ' + path;
+                P.IO.startTask(task);
                 return new Promise((resolve, reject) => {
                     const image = new Image();
                     image.onload = function () {
-                        P.IO.progressHooks.end();
+                        P.IO.endTask(task);
                         resolve(image);
                     };
                     image.onerror = function (err) {
-                        P.IO.progressHooks.error(err);
                         reject('Failed to load image: ' + image.src);
                     };
                     image.crossOrigin = 'anonymous';

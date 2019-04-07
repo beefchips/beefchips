@@ -167,6 +167,8 @@ P.player = (function() {
     P.player.projectId = id;
     P.player.projectURL = id ? 'https://scratch.mit.edu/projects/' + id + '/' : '';
 
+    P.IO.setPhase(P.IO.Phase.Project);
+
     return P.IO.fetch(P.config.PROJECT_API.replace('$id', id))
       .then((req) => req.json())
       .then((json) => {
@@ -213,19 +215,33 @@ P.player = (function() {
   // Install our progress hooks
   var totalTasks = 0;
   var finishedTasks = 0;
-  P.IO.progressHooks.new = function() {
+  P.IO.hooks.startTask = function(task) {
+    if (P.config.debug) {
+      console.log('start task', task);
+    }
     totalTasks++;
     setProgress(finishedTasks / totalTasks);
   };
-  P.IO.progressHooks.end = function() {
+  P.IO.hooks.endTask = function(task) {
+    if (P.config.debug) {
+      console.log('end task', task);
+    }
     finishedTasks++;
     setProgress(finishedTasks / totalTasks);
   };
-  P.IO.progressHooks.set = function(progress) {
-    setProgress(progress);
+  P.IO.hooks.setPhase = function(phase) {
+    if (P.config.debug) {
+      console.log('set phase', phase);
+    }
+    totalTasks = 0;
+    finishedTasks = 0;
+    setProgress(0);
   };
-  P.IO.progressHooks.error = function(error) {
-    showError(error);
+  P.IO.hooks.overall = function(progress) {
+    if (P.config.debug) {
+      console.log('set overall', progress);
+    }
+    setProgress(progress);
   };
 
   function showProgress() {

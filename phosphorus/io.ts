@@ -3,32 +3,74 @@
 // IO helpers and hooks
 
 namespace P.IO {
-  // Hooks that can be replaced by other scripts to hook into progress reports.
-  export const progressHooks = {
-    // Indicates that a new task has started
-    new() {},
-    // Indicates that a task has finished successfully
-    end() {},
-    // Sets the current progress, should override new() and end()
-    set(p) {},
-    // Indicates an error has occurred and the project will likely fail to load
-    error(error) {},
+  /**
+   * Phases of loading projects.
+   */
+  export enum Phase {
+    /**
+     * The project's assets (costumes, sounds) are being downloaded. (typically the longest phase)
+     */
+    Assets = 'assets',
+    /**
+     * The project file is being read.
+     */
+    File = 'file',
+    /**
+     * The project file is being downloaded.
+     */
+    Project = 'project',
+    /**
+     * Dependencies of the runtime (fonts, other things) are being downloaded.
+     */
+    Dependencies = 'dependencies',
+  }
+
+  export const hooks = {
+    setPhase(phase: Phase) {
+
+    },
+    startTask(task: string) {
+
+    },
+    endTask(task: string) {
+
+    },
+    overall(progress: number) {
+
+    },
   };
 
-  export function fetch(url: string, opts?: any) {
-    progressHooks.new();
-    return window.fetch(url, opts)
+  export function setPhase(phase: Phase) {
+    hooks.setPhase(phase);
+  }
+  export function startTask(task: string) {
+    hooks.startTask(task);
+  }
+  export function endTask(task: string) {
+    hooks.endTask(task);
+  }
+  export function overall(progress: number) {
+    hooks.overall(progress);
+  }
+
+  /**
+   * Download a URL. Uses appropriate progress hooks.
+   */
+  export function fetch(url: string): Promise<Response> {
+    const taskId = 'fetch ' + url;
+    hooks.startTask(taskId);
+    return window.fetch(url)
       .then((r) => {
-        progressHooks.end();
+        hooks.endTask(taskId);
         return r;
-      })
-      .catch((err) => {
-        progressHooks.error(err);
-        throw err;
       });
   }
 
-  export function fileAsArrayBuffer(file) {
+  /**
+   * Read a file as an ArrayBuffer. Uses appropriate progress hooks.
+   */
+  export function fileAsArrayBuffer(file: File) {
+    setPhase(Phase.File);
     const fileReader = new FileReader();
 
     return new Promise((resolve, reject) => {
@@ -37,11 +79,11 @@ namespace P.IO {
       };
 
       fileReader.onerror = function(err) {
-        reject('Failed to load file');
+        reject(err);
       };
 
-      fileReader.onprogress = function(progress) {
-        progressHooks.set(progress);
+      fileReader.onprogress = function(event) {
+        overall(event.loaded / event.total);
       };
 
       fileReader.readAsArrayBuffer(file);

@@ -736,9 +736,14 @@ namespace P.sb3 {
       // sort targets by their layerOrder to match how they will display
       targets.sort((a, b) => a.layerOrder - b.layerOrder);
 
+      P.IO.setPhase(P.IO.Phase.Dependencies);
+
       return this.loadFonts()
-        .then(() => Promise.all(targets.map((data) => this.loadTarget(data))))
-        .then((targets: any) => {
+        .then(() => {
+          P.IO.setPhase(P.IO.Phase.Assets);
+          return Promise.all(targets.map((data) => this.loadTarget(data)));
+        })
+        .then((targets: Target[]) => {
           const stage = targets.filter((i) => i.isStage)[0] as Scratch3Stage;
           if (!stage) {
             throw new Error('no stage object');
@@ -771,44 +776,47 @@ namespace P.sb3 {
     }
 
     getAsText(path: string) {
-      P.IO.progressHooks.new();
+      const task = 'getAsText#zip ' + path;
+      P.IO.startTask(task);
       return this.zip.file(path).async('text')
         .then((response) => {
-          P.IO.progressHooks.end();
+          P.IO.endTask(task);
           return response;
         });
     }
 
     getAsArrayBuffer(path: string) {
-      P.IO.progressHooks.new();
+      const task = 'getAsArrayBuffer#zip ' + path;
+      P.IO.startTask(task);
       return this.zip.file(path).async('arrayBuffer')
         .then((response) => {
-          P.IO.progressHooks.end();
+          P.IO.endTask(task);
           return response;
         });
     }
 
     getAsBase64(path: string) {
-      P.IO.progressHooks.new();
+      const task = 'getAsBase64#zip ' + path;
+      P.IO.startTask(task);
       return this.zip.file(path).async('base64')
         .then((response) => {
-          P.IO.progressHooks.end();
+          P.IO.endTask(task);
           return response;
         });
     }
 
     getAsImage(path: string, format: string) {
-      P.IO.progressHooks.new();
+      const task = 'getAsImage#zip ' + path + ' ' + format;
+      P.IO.startTask(task);
       return this.getAsBase64(path)
         .then((imageData) => {
           return new Promise<HTMLImageElement>((resolve, reject) => {
             const image = new Image();
             image.onload = function() {
-              P.IO.progressHooks.end();
+              P.IO.endTask(task)
               resolve(image);
             };
             image.onerror = function(error) {
-              P.IO.progressHooks.error(error);
               reject('Failed to load image: ' + path + '.' + format);
             };
             image.src = 'data:image/' + format + ';base64,' + imageData;
@@ -855,15 +863,15 @@ namespace P.sb3 {
     }
 
     getAsImage(path: string) {
-      P.IO.progressHooks.new();
+      const task = 'getAsImage#web ' + path;
+      P.IO.startTask(task);
       return new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
         image.onload = function() {
-          P.IO.progressHooks.end();
+          P.IO.endTask(task);
           resolve(image);
         };
         image.onerror = function(err) {
-          P.IO.progressHooks.error(err);
           reject('Failed to load image: ' + image.src);
         };
         image.crossOrigin = 'anonymous';

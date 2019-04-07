@@ -159,11 +159,11 @@
 
     var totalTasks = 0;
     var completedTasks = 0;
-    P.IO.progressHooks.new = function() {
+    P.IO.hooks.startTask = function(task) {
       totalTasks++;
       progressBar.style.width = (10 + completedTasks / totalTasks * 90) + '%';
     };
-    P.IO.progressHooks.end = function() {
+    P.IO.hooks.endTask = function(task) {
       completedTasks++;
       progressBar.style.width = (10 + completedTasks / totalTasks * 90) + '%';
     };

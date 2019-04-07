@@ -12,10 +12,11 @@ namespace P.fonts {
    * @param name The name of the font (font-family)
    */
   export function loadFont(name: string): Promise<void> {
-    P.IO.progressHooks.new();
+    const task = 'loadFont ' + name;
+    P.IO.startTask(task);
     const observer = new FontFaceObserver(name);
     return observer.load().then(() => {
-      P.IO.progressHooks.end();
+      P.IO.endTask(task);
     });
   }
 

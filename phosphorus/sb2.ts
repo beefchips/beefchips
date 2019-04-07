@@ -439,15 +439,16 @@ namespace P.sb2 {
   }
 
   // loads an image from a URL
-  export function loadImage(url): Promise<HTMLImageElement> {
-    P.IO.progressHooks.new();
+  export function loadImage(url: string): Promise<HTMLImageElement> {
+    const task = 'loadImage ' + url;
+    P.IO.startTask(task);
 
     var image = new Image();
     image.crossOrigin = 'anonymous';
 
     return new Promise((resolve, reject) => {
       image.onload = function() {
-        P.IO.progressHooks.end();
+        P.IO.endTask(task);
         resolve(image);
       };
       image.onerror = function(err) {
@@ -475,13 +476,17 @@ namespace P.sb2 {
     var children;
     var stage;
 
+    P.IO.setPhase(P.IO.Phase.Dependencies);
+
     return loadFonts()
-      .then(() => Promise.all<any>([
-        loadWavs(),
-        loadArray(data.children, loadObject).then((c) => children = c),
-        loadBase(data, true).then((s) => stage = s),
-      ]))
       .then(() => {
+        P.IO.setPhase(P.IO.Phase.Assets);
+        return Promise.all<any>([
+          loadWavs(),
+          loadArray(data.children, loadObject).then((c) => children = c),
+          loadBase(data, true).then((s) => stage = s),
+        ]);
+      }).then(() => {
         children = children.filter((i) => i);
         children.forEach((c) => c.stage = stage);
         var sprites = children.filter((i) => i instanceof Scratch2Sprite);
