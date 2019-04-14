@@ -180,7 +180,7 @@ var P;
     (function (config) {
         config.scale = window.devicePixelRatio || 1;
         config.hasTouchEvents = 'ontouchstart' in document;
-        config.framerate = 30;
+        config.framerate = 120;
         config.debug = window.location.search.includes("debug");
         config.PROJECT_API = 'https://projects.scratch.mit.edu/$id';
     })(config = P.config || (P.config = {}));
